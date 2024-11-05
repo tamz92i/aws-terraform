@@ -5,6 +5,11 @@ terraform {
       version = "5.74"
     }
   }
+  backend "s3" {
+    bucket = "tf-state-lab-florent"
+    key    = "tf-state"
+    region = "us-east-1"
+  }
 }
 
 provider "aws" {
@@ -17,3 +22,13 @@ resource "aws_vpc" "vpc" {
     Name = "main-tf"
   }
 }
+
+resource "aws_s3_bucket" "tf-state" {
+  bucket = "tf-state-lab-florent"
+
+  tags = {
+    Name        = "Terraform remote state"
+    Environment = "Dev"
+  }
+}
+
