@@ -22,11 +22,6 @@ resource "aws_internet_gateway" "gw" {
   }
 }
 
-resource "aws_internet_gateway_attachment" "gwattachment" {
-  internet_gateway_id = aws_internet_gateway.gw.id
-  vpc_id              = aws_vpc.vpc.id
-}
-
 resource "aws_route_table" "public-route-table" {
   vpc_id = aws_vpc.vpc.id
 
