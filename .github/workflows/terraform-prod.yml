@@ -27,8 +27,8 @@ jobs:
 
       # Runs a single command using the runners shell
       - name: Terraform init
-        run: terraform init
+        run: terraform init -backend-config=key=tf-state.prod 
 
       # Runs a set of commands using the runners shell
       - name: Terraform apply
-        run: terraform apply -auto-approve -backend-config=key=tf-state.prod --var-file=var-prod.tfvars
+        run: terraform apply -auto-approve --var-file=var-prod.tfvars
