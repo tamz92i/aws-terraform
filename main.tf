@@ -1,77 +1,38 @@
 provider "aws" {
-  region = "us-east-1"
+  region = "us-east-1"  # Choisissez la région de votre choix
 }
 
-# S3 Backend pour le stockage de l'état Terraform
-terraform {
-  backend "s3" {
-    bucket = "tf-state-lab-florent"
-    key    = "tictactoe/tf-state"
-    region = "us-east-1"
+resource "aws_instance" "tictactoe" {
+  ami           = "ami-0c55b159cbfafe1f0"  # Remplacez par un ID d'AMI valide
+  instance_type = "t2.micro"  # Vous pouvez ajuster le type d'instance selon vos besoins
+  key_name      = "lol"  # Remplacez par le nom de votre clé SSH
+
+  security_groups = ["tictactoe-sg"]
+
+  tags = {
+    Name = "TicTacToeInstance"
   }
+
+  user_data = <<-EOF
+              #!/bin/bash
+              cd /home/ec2-user
+              git clone https://github.com/aqeelanwar/Tic-Tac-Toe.git
+              cd tictactoe
+              npm install
+              npm start
+              EOF
 }
 
-# Dépôt ECR pour stocker l'image Docker
-resource "aws_ecr_repository" "tictactoe_repo" {
-  name = "tictactoe-app"
-}
+resource "aws_security_group" "tictactoe-sg" {
+  name        = "tictactoe-sg"
+  description = "Permet l'accès SSH et HTTP"
 
-# Cluster ECS
-resource "aws_ecs_cluster" "tictactoe_cluster" {
-  name = "tictactoe-cluster"
-}
-
-# Table DynamoDB pour stocker les données de jeu Tic-Tac-Toe
-resource "aws_dynamodb_table" "tictactoe_table" {
-  name           = "TicTacToeGame"
-  hash_key       = "GameId"
-  attribute {
-    name = "GameId"
-    type = "S"
+  ingress {
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
   }
-  read_capacity  = 5
-  write_capacity = 5
-}
-
-# Définition de la tâche ECS pour l'application
-resource "aws_ecs_task_definition" "tictactoe_task_def" {
-  family                   = "tictactoe-task"
-  container_definitions    = jsonencode([{
-    name  = "tictactoe-container"
-    image = "${aws_ecr_repository.tictactoe_repo.repository_url}:latest"
-    memory = 512
-    cpu    = 256
-    essential = true
-    portMappings = [{
-      containerPort = 80
-      hostPort      = 80
-    }]
-    environment = [{
-      name  = "DYNAMODB_TABLE"
-      value = aws_dynamodb_table.tictactoe_table.name
-    }]
-  }])
-}
-
-# Service ECS
-resource "aws_ecs_service" "tictactoe_service" {
-  name            = "tictactoe-service"
-  cluster         = aws_ecs_cluster.tictactoe_cluster.id
-  desired_count   = 1
-  task_definition = aws_ecs_task_definition.tictactoe_task_def.arn
-  launch_type     = "FARGATE"
-  network_configuration {
-    subnets         = [var.subnet_id]
-    assign_public_ip = true
-    security_groups = [aws_security_group.tictactoe_sg.id]
-  }
-}
-
-# Security Group pour l'accès au service
-resource "aws_security_group" "tictactoe_sg" {
-  name_prefix = "tictactoe-sg"
-  description = "Allow HTTP inbound traffic"
-  vpc_id      = var.vpc_id
 
   ingress {
     from_port   = 80
@@ -79,27 +40,4 @@ resource "aws_security_group" "tictactoe_sg" {
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
   }
-
-  egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-}
-
-# Variables pour VPC et Subnet
-variable "vpc_id" {}
-variable "subnet_id" {}
-
-output "ecr_repository_url" {
-  value = aws_ecr_repository.tictactoe_repo.repository_url
-}
-
-output "ecs_cluster_name" {
-  value = aws_ecs_cluster.tictactoe_cluster.name
-}
-
-output "dynamodb_table_name" {
-  value = aws_dynamodb_table.tictactoe_table.name
 }
