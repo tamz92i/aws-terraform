@@ -1,82 +1,88 @@
-# Définition du backend S3 pour stocker l'état de Terraform
-terraform {
-  backend "s3" {
-    bucket = "votre-bucket-terraform"  # Remplacez par le nom de votre bucket S3
-    key    = "terraform/state/terraform.tfstate"  # Chemin du fichier d'état dans le bucket S3
-    region = "us-east-1"  # Région où votre bucket S3 est créé
-  }
-}
-
-# Provider AWS
+# Configuration du fournisseur AWS
 provider "aws" {
-  region = "us-east-1"  # 
+  region = "us-east-1"
 }
 
-# Définir la clé SSH pour accéder à l'instance EC2
+# Définir un bucket S3 pour stocker l'état de Terraform
+resource "aws_s3_bucket" "terraform_bucket" {
+  bucket = "votre-bucket-terraform"
+  acl    = "private"
+}
+
+# Utilisation d'une ressource dédiée pour l'ACL du bucket
+resource "aws_s3_bucket_acl" "terraform_bucket_acl" {
+  bucket = aws_s3_bucket.terraform_bucket.bucket
+  acl    = "private"
+}
+
+# Créer une paire de clés SSH
 resource "aws_key_pair" "key_pair" {
-  key_name   = "tictactoe-key"
-  public_key = file("~/.ssh/id_rsa.pub")  # Remplacez avec le chemin vers votre clé publique SSH
+  key_name   = "my-key"
+  # Assurez-vous que le chemin vers la clé publique est correct
+  public_key = file("/home/cloudshell-user/.ssh/id_rsa.pub")  # Remplacez ce chemin si nécessaire
 }
 
-# Créer une instance EC2 pour héberger l'application Tic-Tac-Toe
+# Création d'une instance EC2 pour déployer le Tic-Tac-Toe
 resource "aws_instance" "tictactoe_instance" {
-  ami           = "ami-0c55b159cbfafe1f0"  # Remplacez par l'AMI de votre choix (exemple: Amazon Linux 2)
+  ami           = "ami-0c55b159cbfafe1f0"  # Remplacez par l'AMI que vous voulez utiliser
   instance_type = "t2.micro"
   key_name      = aws_key_pair.key_pair.key_name
 
-  # Configuration de sécurité
-  security_groups = [aws_security_group.sg.name]
-  
-  tags = {
-    Name = "TicTacToeInstance"
-  }
+  # Configuration du groupe de sécurité (ouverture du port HTTP)
+  security_groups = [aws_security_group.tictactoe_sg.name]
 
-  # User data pour installer et démarrer Tic-Tac-Toe
-  user_data = <<-EOF
-              #!/bin/bash
-              cd /home/ec2-user
-              git clone https://github.com/Darhazer/nodejs-tic-tac-toe.git
-              cd tictactoe
-              # Exemple d'installation d'une app Python (à adapter selon votre projet)
-              pip install -r requirements.txt
-              python app.py
-              EOF
+  # Tagging de l'instance
+  tags = {
+    Name = "Tic-Tac-Toe Instance"
+  }
 }
 
-# Créer un groupe de sécurité pour permettre l'accès HTTP
-resource "aws_security_group" "sg" {
-  name        = "tictactoe-sg"
-  description = "Allow HTTP access"
-  vpc_id      = "vpc-xxxxxxxx"  # Remplacez par l'ID de votre VPC (si nécessaire)
-
+# Sécurité pour l'instance EC2 (autorisation HTTP)
+resource "aws_security_group" "tictactoe_sg" {
+  name        = "tictactoe_sg"
+  description = "Allow HTTP traffic"
+  
+  # Autoriser le trafic HTTP sur le port 80
   ingress {
     from_port   = 80
     to_port     = 80
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
   }
-
-  egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
+  
+  # Autoriser le trafic SSH pour l'accès à l'instance
+  ingress {
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
   }
 }
 
-# Elastic IP pour l'instance EC2 (facultatif)
-resource "aws_eip" "tictactoe_ip" {
-  instance = aws_instance.tictactoe_instance.id
-}
-
-# Output de l'adresse IP publique de l'instance
-output "public_ip" {
-  value = aws_instance.tictactoe_instance.public_ip
-}
-
-# S3 Bucket pour héberger les fichiers d'état de Terraform
-resource "aws_s3_bucket" "terraform_bucket" {
-  bucket = "votre-bucket-terraform"  # Remplacez par le nom du bucket S3 que vous souhaitez créer
+# Créer un bucket S3 pour stocker l'application Tic-Tac-Toe (optionnel)
+resource "aws_s3_bucket" "tictactoe_bucket" {
+  bucket = "votre-tictactoe-bucket"
   acl    = "private"
 }
 
+# Créer une ressource AWS EC2 pour déployer l'application
+resource "aws_instance" "tictactoe_ec2" {
+  ami           = "ami-0c55b159cbfafe1f0"  # Remplacez par l'AMI appropriée pour votre application
+  instance_type = "t2.micro"
+  key_name      = aws_key_pair.key_pair.key_name
+  security_groups = [aws_security_group.tictactoe_sg.name]
+
+  # Définition des tags pour l'instance EC2
+  tags = {
+    Name = "TicTacToe Instance"
+  }
+}
+
+# Pour l'initialisation et la configuration du S3 backend (optionnel)
+terraform {
+  backend "s3" {
+    bucket = "votre-bucket-terraform"
+    key    = "terraform.tfstate"
+    region = "us-east-1"
+  }
+}
