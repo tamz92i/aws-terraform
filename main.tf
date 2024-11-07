@@ -1,38 +1,53 @@
-provider "aws" {
-  region = "us-east-1"  # Choisissez la région de votre choix
+# Définition du backend S3 pour stocker l'état de Terraform
+terraform {
+  backend "s3" {
+    bucket = "votre-bucket-terraform"  # Remplacez par le nom de votre bucket S3
+    key    = "terraform/state/terraform.tfstate"  # Chemin du fichier d'état dans le bucket S3
+    region = "us-east-1"  # Région où votre bucket S3 est créé
+  }
 }
 
-resource "aws_instance" "tictactoe" {
-  ami           = "ami-0c55b159cbfafe1f0"  # Remplacez par un ID d'AMI valide
-  instance_type = "t2.micro"  # Vous pouvez ajuster le type d'instance selon vos besoins
-  key_name      = "lol"  # Remplacez par le nom de votre clé SSH
+# Provider AWS
+provider "aws" {
+  region = "us-east-1"  # Spécifiez la région AWS que vous utilisez
+}
 
-  security_groups = ["tictactoe-sg"]
+# Définir la clé SSH pour accéder à l'instance EC2
+resource "aws_key_pair" "key_pair" {
+  key_name   = "tictactoe-key"
+  public_key = file("~/.ssh/id_rsa.pub")  # Remplacez avec le chemin vers votre clé publique SSH
+}
 
+# Créer une instance EC2 pour héberger l'application Tic-Tac-Toe
+resource "aws_instance" "tictactoe_instance" {
+  ami           = "ami-0c55b159cbfafe1f0"  # Remplacez par l'AMI de votre choix (exemple: Amazon Linux 2)
+  instance_type = "t2.micro"
+  key_name      = aws_key_pair.key_pair.key_name
+
+  # Configuration de sécurité
+  security_groups = [aws_security_group.sg.name]
+  
   tags = {
     Name = "TicTacToeInstance"
   }
 
+  # User data pour installer et démarrer Tic-Tac-Toe
   user_data = <<-EOF
               #!/bin/bash
               cd /home/ec2-user
-              git clone https://github.com/aqeelanwar/Tic-Tac-Toe.git
+              git clone https://github.com/Darhazer/nodejs-tic-tac-toe.git
               cd tictactoe
-              npm install
-              npm start
+              # Exemple d'installation d'une app Python (à adapter selon votre projet)
+              pip install -r requirements.txt
+              python app.py
               EOF
 }
 
-resource "aws_security_group" "tictactoe-sg" {
+# Créer un groupe de sécurité pour permettre l'accès HTTP
+resource "aws_security_group" "sg" {
   name        = "tictactoe-sg"
-  description = "Permet l'accès SSH et HTTP"
-
-  ingress {
-    from_port   = 22
-    to_port     = 22
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
+  description = "Allow HTTP access"
+  vpc_id      = "vpc-xxxxxxxx"  # Remplacez par l'ID de votre VPC (si nécessaire)
 
   ingress {
     from_port   = 80
@@ -40,4 +55,28 @@ resource "aws_security_group" "tictactoe-sg" {
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
   }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
 }
+
+# Elastic IP pour l'instance EC2 (facultatif)
+resource "aws_eip" "tictactoe_ip" {
+  instance = aws_instance.tictactoe_instance.id
+}
+
+# Output de l'adresse IP publique de l'instance
+output "public_ip" {
+  value = aws_instance.tictactoe_instance.public_ip
+}
+
+# S3 Bucket pour héberger les fichiers d'état de Terraform
+resource "aws_s3_bucket" "terraform_bucket" {
+  bucket = "votre-bucket-terraform"  # Remplacez par le nom du bucket S3 que vous souhaitez créer
+  acl    = "private"
+}
+
