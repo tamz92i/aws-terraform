@@ -9,7 +9,7 @@ terraform {
 
 # Provider AWS
 provider "aws" {
-  region = "us-east-1"  # Spécifiez la région AWS que vous utilisez
+  region = "us-east-1"  # 
 }
 
 # Définir la clé SSH pour accéder à l'instance EC2
